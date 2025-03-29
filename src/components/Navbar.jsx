@@ -1,18 +1,26 @@
 import React, { useState } from 'react';
 import { AppBar, Toolbar, Typography, Button, IconButton, Box, Drawer } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Navbar = () => {
     const [isMobile, setIsMobile] = useState(false);
+    const navigate = useNavigate();
 
     const toggleDrawer = () => setIsMobile(!isMobile);
 
+
+    const handleNavigate = (path) => {
+        navigate(path);
+        setIsMobile(false);
+    };
+
     const menuItems = (
         <>
-            <Button color="inherit">Dashboard</Button>
-            <Button color="inherit">About Us</Button>
-            <Button color="inherit">Tasks</Button>
-            <Button color="inherit">Contact</Button>
+            <Button color="inherit" onClick={() => handleNavigate("/")}>Dashboard</Button>
+            <Button color="inherit" onClick={() => handleNavigate("/lists")}>Lists</Button>
+            <Button color="inherit" onClick={() => handleNavigate("/about")}>About Us</Button>
+            <Button color="inherit" onClick={() => handleNavigate("/contact")}>Contact</Button>
         </>
     );
 

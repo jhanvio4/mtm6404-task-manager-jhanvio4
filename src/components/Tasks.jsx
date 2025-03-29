@@ -1,73 +1,115 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+    Grid, Typography, Button, Dialog, DialogTitle, DialogContent,
+    DialogActions, TextField, Select, MenuItem, FormControl, InputLabel
+} from '@mui/material';
 import SingleTask from './SingleTask';
-import CardWrapper from './CardWrapper';
 
 const Tasks = () => {
+    const { listId } = useParams();
+    const navigate = useNavigate();
+    const [lists, setLists] = useState([]);
     const [tasks, setTasks] = useState([]);
-    const [newTask, setNewTask] = useState({ title: '', detail: '', priority: 1 });
+    const [newTask, setNewTask] = useState({ title: '', detail: '', priority: 1, listId: listId || '' });
     const [showCompleted, setShowCompleted] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
+
     useEffect(() => {
-        const storedTasks = localStorage.getItem('tasks');
-        if (storedTasks) {
-            try {
-                setTasks(sortTasksByPriority(JSON.parse(storedTasks)));
-            } catch (error) {
-                console.error("Error parsing localStorage tasks:", error);
+        const storedLists = JSON.parse(localStorage.getItem('taskLists')) || [];
+        setLists(storedLists);
+
+        if (listId) {
+            const selectedList = storedLists.find(list => list.id === Number(listId));
+            if (selectedList) {
+                setTasks(sortTasksByPriority(selectedList.tasks || []));
+            } else {
                 setTasks([]);
             }
-        } else {
-            setTasks([]);
         }
-    }, []);
-
-    useEffect(() => {
-        if (tasks.length > 0) {
-            localStorage.setItem('tasks', JSON.stringify(tasks));
-        }
-    }, [tasks]);
-
-    const sortTasksByPriority = (tasks) => {
-        return tasks.sort((a, b) => a.priority - b.priority);
-    };
+    }, [listId]);
 
     const handleAddTask = () => {
-        if (!newTask.title.trim() || !newTask.detail.trim()) return;
+        if (!newTask.title.trim() || !newTask.detail.trim() || !newTask.listId) return;
 
-        const newTaskItem = {
-            id: Date.now(),
-            ...newTask,
-            completed: false
-        };
+        const newTaskItem = { id: Date.now(), ...newTask, completed: false };
+        console.log("lists", lists)
 
-        setTasks(prevTasks => {
-            const updatedTasks = [...prevTasks, newTaskItem];
-            return sortTasksByPriority(updatedTasks);
-        });
-        setNewTask({ title: '', detail: '', priority: 1 });
+        const updatedLists = lists.map(list =>
+            list.id === Number(newTask.listId)
+                ? {
+                    ...list,
+                    tasks: sortTasksByPriority([...(list.tasks || []), newTaskItem])
+                }
+                : list
+        );
+
+
+        localStorage.setItem('taskLists', JSON.stringify(updatedLists));
+        setLists(updatedLists);
+
+        const updatedSelectedList = updatedLists.find(list => list.id == listId);
+        console.log('updatedSelectedList', updatedSelectedList)
+        if (updatedSelectedList) {
+            setTasks(sortTasksByPriority(updatedSelectedList.tasks));
+        }
+
+
+        setNewTask({ title: '', detail: '', priority: 1, listId: newTask.listId });
         setIsModalOpen(false);
     };
 
+
+
+
+    const sortTasksByPriority = (tasks) => tasks.sort((a, b) => a.priority - b.priority);
+
+
+
     const toggleCompletion = (id) => {
-        setTasks(prevTasks => {
-            const updatedTasks = prevTasks.map(task =>
-                task.id === id ? { ...task, completed: !task.completed } : task
-            );
-            return sortTasksByPriority(updatedTasks);
-        });
+
+        const updatedTasks = tasks.map(task =>
+            task.id === id ? { ...task, completed: !task.completed } : task
+        );
+
+
+        const updatedLists = lists.map(list =>
+            list.id === Number(listId)
+                ? { ...list, tasks: updatedTasks }
+                : list
+        );
+
+
+        localStorage.setItem('taskLists', JSON.stringify(updatedLists));
+
+
+        setTasks(updatedTasks);
     };
 
     const deleteTask = (id) => {
-        setTasks(prevTasks => {
-            const updatedTasks = prevTasks.filter(task => task.id !== id);
-            return sortTasksByPriority(updatedTasks);
-        });
+
+        const updatedTasks = tasks.filter(task => task.id !== id);
+
+
+        const updatedLists = lists.map(list =>
+            list.id === Number(listId)
+                ? { ...list, tasks: updatedTasks }
+                : list
+        );
+
+
+        localStorage.setItem('taskLists', JSON.stringify(updatedLists));
+
+
+        setTasks(updatedTasks);
     };
 
     return (
         <Grid container spacing={3}>
+            <Grid item xs={12} style={{ textAlign: 'center' }}>
+                <Typography variant="h5">Tasks for {lists.find(l => l.id === Number(listId))?.name || "Unknown List"}</Typography>
+            </Grid>
 
             <Grid item xs={6} style={{ textAlign: 'center' }}>
                 <Button variant="contained" color="primary" onClick={() => setIsModalOpen(true)}>
@@ -78,6 +120,20 @@ const Tasks = () => {
             <Dialog open={isModalOpen} onClose={() => setIsModalOpen(false)}>
                 <DialogTitle>Add a New Task</DialogTitle>
                 <DialogContent>
+                    <FormControl fullWidth margin="normal">
+                        <InputLabel>Select List</InputLabel>
+                        <Select
+                            value={newTask.listId}
+                            onChange={(e) => setNewTask({ ...newTask, listId: e.target.value })}
+                        >
+                            {lists.map(list => (
+                                <MenuItem key={list.id} value={list.id}>
+                                    {list.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
                     <TextField
                         label="Title"
                         fullWidth
@@ -93,6 +149,7 @@ const Tasks = () => {
                         onChange={(e) => setNewTask({ ...newTask, detail: e.target.value })}
                     />
                     <FormControl fullWidth margin="normal">
+                        <InputLabel>Priority</InputLabel>
                         <Select
                             value={newTask.priority}
                             onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
@@ -115,7 +172,11 @@ const Tasks = () => {
                 </Button>
             </Grid>
 
-            {tasks.length > 0 ? (
+            {tasks.length === 0 ? (
+                <Typography variant="h6" style={{ textAlign: 'center', width: '100%', marginTop: '70px' }}>
+                    No tasks available. Add a new task to get started!
+                </Typography>
+            ) : (
                 tasks
                     .filter(task => showCompleted || !task.completed)
                     .map(task => (
@@ -123,9 +184,10 @@ const Tasks = () => {
                             <SingleTask task={task} onToggleComplete={toggleCompletion} onDelete={deleteTask} />
                         </Grid>
                     ))
-            ) : (
-                <Typography variant="h6" style={{ textAlign: 'center', marginTop: '20px' }}>No tasks available.</Typography>
             )}
+            <Grid item xs={12} style={{ textAlign: 'center', marginTop: 20 }}>
+                <Button variant="outlined" onClick={() => navigate('/lists')}>Back to Lists</Button>
+            </Grid>
         </Grid>
     );
 };
