@@ -1,66 +1,76 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import {
+    collection,
+    doc,
+    onSnapshot,
+    setDoc,
+    deleteDoc,
+    updateDoc,
+    arrayUnion,
+    arrayRemove,
+} from "firebase/firestore";
+import { db } from "../firebase";
 
 const TaskContext = createContext();
 
 export const TaskProvider = ({ children }) => {
-    const [lists, setLists] = useState(() => {
-
-        const storedLists = localStorage.getItem("taskLists");
-
-        return Array.isArray(storedLists) ? storedLists : JSON.parse(storedLists) || [];
-    });
-
+    const [lists, setLists] = useState([]);
     const [selectedListId, setSelectedListId] = useState(null);
     const [filter, setFilter] = useState("all");
 
     useEffect(() => {
-        if (Array.isArray(lists)) {
-            localStorage.setItem("taskLists", JSON.stringify(lists));
-        }
-    }, [lists]);
+        const unsubscribe = onSnapshot(collection(db, "taskLists"), (snapshot) => {
+            const listsData = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
+            setLists(listsData);
+        });
 
-    const addList = (name) => {
-        const newList = { id: Date.now(), name, tasks: [] };
+        return () => unsubscribe();
+    }, []);
 
-        setLists((prevLists) => [...(Array.isArray(prevLists) ? prevLists : []), newList]);
+    const addList = async (name) => {
+        const newList = {
+            name,
+            tasks: [],
+        };
+        const newListRef = doc(collection(db, "taskLists"));
+        await setDoc(newListRef, newList);
     };
 
-    const deleteList = (id) => {
-        setLists(lists.filter((list) => list.id !== id));
+    const deleteList = async (id) => {
+        await deleteDoc(doc(db, "taskLists", id));
         if (selectedListId === id) setSelectedListId(null);
     };
 
-    const addTask = (listId, task) => {
-        setLists(
-            lists.map((list) =>
-                list.id === listId ? { ...list, tasks: [...list.tasks, task] } : list
-            )
-        );
+    const addTask = async (listId, task) => {
+        const listRef = doc(db, "taskLists", listId);
+        await updateDoc(listRef, {
+            tasks: arrayUnion(task),
+        });
     };
 
-    const deleteTask = (listId, taskId) => {
-        setLists(
-            lists.map((list) =>
-                list.id === listId
-                    ? { ...list, tasks: list.tasks.filter((task) => task.id !== taskId) }
-                    : list
-            )
-        );
+    const deleteTask = async (listId, taskId) => {
+        const list = lists.find((l) => l.id === listId);
+        if (!list) return;
+        const updatedTasks = list.tasks.filter((task) => task.id !== taskId);
+
+        await updateDoc(doc(db, "taskLists", listId), {
+            tasks: updatedTasks,
+        });
     };
 
-    const toggleTaskStatus = (listId, taskId) => {
-        setLists(
-            lists.map((list) =>
-                list.id === listId
-                    ? {
-                        ...list,
-                        tasks: list.tasks.map((task) =>
-                            task.id === taskId ? { ...task, completed: !task.completed } : task
-                        ),
-                    }
-                    : list
-            )
+    const toggleTaskStatus = async (listId, taskId) => {
+        const list = lists.find((l) => l.id === listId);
+        if (!list) return;
+        const updatedTasks = list.tasks.map((task) =>
+            task.id === taskId ? { ...task, completed: !task.completed } : task
         );
+
+        await updateDoc(doc(db, "taskLists", listId), {
+            tasks: updatedTasks,
+        });
     };
 
     return (

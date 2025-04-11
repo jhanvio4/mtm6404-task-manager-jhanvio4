@@ -6,109 +6,80 @@ import {
 } from '@mui/material';
 import SingleTask from './SingleTask';
 
+import {
+    getFirestore, collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc
+} from 'firebase/firestore';
+import { db } from '../firebase';
+
 const Tasks = () => {
     const { listId } = useParams();
     const navigate = useNavigate();
+
     const [lists, setLists] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [newTask, setNewTask] = useState({ title: '', detail: '', priority: 1, listId: listId || '' });
     const [showCompleted, setShowCompleted] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-
     useEffect(() => {
-        const storedLists = JSON.parse(localStorage.getItem('taskLists')) || [];
-        setLists(storedLists);
-
-        if (listId) {
-            const selectedList = storedLists.find(list => list.id === Number(listId));
-            if (selectedList) {
-                setTasks(sortTasksByPriority(selectedList.tasks || []));
-            } else {
-                setTasks([]);
-            }
-        }
+        fetchLists();
     }, [listId]);
 
-    const handleAddTask = () => {
-        if (!newTask.title.trim() || !newTask.detail.trim() || !newTask.listId) return;
-
-        const newTaskItem = { id: Date.now(), ...newTask, completed: false };
-        console.log("lists", lists)
-
-        const updatedLists = lists.map(list =>
-            list.id === Number(newTask.listId)
-                ? {
-                    ...list,
-                    tasks: sortTasksByPriority([...(list.tasks || []), newTaskItem])
-                }
-                : list
+    const fetchLists = async () => {
+        const listSnapshot = await getDocs(collection(db, 'taskLists'));
+        const listData = await Promise.all(
+            listSnapshot.docs.map(async (docSnap) => {
+                const data = docSnap.data();
+                const tasksSnapshot = await getDocs(collection(db, 'taskLists', docSnap.id, 'tasks'));
+                const tasks = tasksSnapshot.docs.map(task => ({ ...task.data(), id: task.id }));
+                return { id: docSnap.id, ...data, tasks: sortTasksByPriority(tasks) };
+            })
         );
+        setLists(listData);
 
-
-        localStorage.setItem('taskLists', JSON.stringify(updatedLists));
-        setLists(updatedLists);
-
-        const updatedSelectedList = updatedLists.find(list => list.id == listId);
-        console.log('updatedSelectedList', updatedSelectedList)
-        if (updatedSelectedList) {
-            setTasks(sortTasksByPriority(updatedSelectedList.tasks));
+        const selectedList = listData.find(list => list.id === listId);
+        if (selectedList) {
+            setTasks(selectedList.tasks);
+        } else {
+            setTasks([]);
         }
-
-
-        setNewTask({ title: '', detail: '', priority: 1, listId: newTask.listId });
-        setIsModalOpen(false);
     };
-
-
-
 
     const sortTasksByPriority = (tasks) => tasks.sort((a, b) => a.priority - b.priority);
 
+    const handleAddTask = async () => {
+        if (!newTask.title.trim() || !newTask.detail.trim() || !newTask.listId) return;
 
+        const newId = Date.now().toString();
+        const taskData = { ...newTask, completed: false };
 
-    const toggleCompletion = (id) => {
-
-        const updatedTasks = tasks.map(task =>
-            task.id === id ? { ...task, completed: !task.completed } : task
-        );
-
-
-        const updatedLists = lists.map(list =>
-            list.id === Number(listId)
-                ? { ...list, tasks: updatedTasks }
-                : list
-        );
-
-
-        localStorage.setItem('taskLists', JSON.stringify(updatedLists));
-
-
-        setTasks(updatedTasks);
+        await setDoc(doc(db, 'taskLists', newTask.listId, 'tasks', newId), taskData);
+        setNewTask({ title: '', detail: '', priority: 1, listId: newTask.listId });
+        setIsModalOpen(false);
+        fetchLists();
     };
 
-    const deleteTask = (id) => {
+    const toggleCompletion = async (id) => {
+        const taskRef = doc(db, 'taskLists', listId, 'tasks', id);
+        const taskSnap = await getDoc(taskRef);
+        if (taskSnap.exists()) {
+            const currentStatus = taskSnap.data().completed;
+            await updateDoc(taskRef, { completed: !currentStatus });
+            fetchLists();
+        }
+    };
 
-        const updatedTasks = tasks.filter(task => task.id !== id);
-
-
-        const updatedLists = lists.map(list =>
-            list.id === Number(listId)
-                ? { ...list, tasks: updatedTasks }
-                : list
-        );
-
-
-        localStorage.setItem('taskLists', JSON.stringify(updatedLists));
-
-
-        setTasks(updatedTasks);
+    const deleteTask = async (id) => {
+        await deleteDoc(doc(db, 'taskLists', listId, 'tasks', id));
+        fetchLists();
     };
 
     return (
         <Grid container spacing={3}>
             <Grid item xs={12} style={{ textAlign: 'center' }}>
-                <Typography variant="h5">Tasks for {lists.find(l => l.id === Number(listId))?.name || "Unknown List"}</Typography>
+                <Typography variant="h5">
+                    Tasks for {lists.find(l => l.id === listId)?.name || "Unknown List"}
+                </Typography>
             </Grid>
 
             <Grid item xs={6} style={{ textAlign: 'center' }}>

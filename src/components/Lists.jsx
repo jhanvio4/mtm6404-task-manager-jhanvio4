@@ -16,12 +16,15 @@ import DeleteIcon from "@mui/icons-material/Delete";
 const Lists = () => {
     const { lists, addList, deleteList, setSelectedListId } = useTaskContext();
     const [listName, setListName] = useState("");
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
-    const handleAddList = () => {
+    const handleAddList = async () => {
         if (listName.trim() !== "") {
-            addList(listName);
+            setLoading(true);
+            await addList(listName);
             setListName("");
+            setLoading(false);
         }
     };
 
@@ -30,9 +33,11 @@ const Lists = () => {
         navigate(`/tasks/${id}`);
     };
 
-    const handleDeleteList = (e, id) => {
+    const handleDeleteList = async (e, id) => {
         e.stopPropagation();
-        deleteList(id);
+        setLoading(true);
+        await deleteList(id);
+        setLoading(false);
     };
 
     return (
@@ -48,6 +53,7 @@ const Lists = () => {
                             label="Enter list name"
                             value={listName}
                             onChange={(e) => setListName(e.target.value)}
+                            disabled={loading}
                         />
                     </Grid>
                     <Grid item xs={3}>
@@ -55,11 +61,10 @@ const Lists = () => {
                             variant="contained"
                             fullWidth
                             onClick={handleAddList}
-                            sx={{
-                                height: "100%"
-                            }}
+                            disabled={loading || listName.trim() === ""}
+                            sx={{ height: "100%" }}
                         >
-                            Add List
+                            {loading ? "Adding..." : "Add List"}
                         </Button>
                     </Grid>
                 </Grid>
@@ -90,6 +95,7 @@ const Lists = () => {
                                             color: "#d32f2f",
                                         },
                                     }}
+                                    disabled={loading}
                                 >
                                     <DeleteIcon />
                                 </IconButton>
